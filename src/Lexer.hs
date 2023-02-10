@@ -2,9 +2,7 @@ module Lexer (Punctuation (..), Value, Token (..), lexer) where
 
 import Data.Char (isDigit)
 
-data Space = Space
-
-data Comment = Comment
+data Useless = Space | Comment
 
 data Punctuation = Comma | Colon | BraceStart | BraceEnd | BracketStart | BracketEnd
   deriving (Show)
@@ -20,14 +18,14 @@ instance Show Value where
   show (JSBoolean b) = show b
   show JSNull = "null"
 
-parseSpace :: String -> Maybe (Space, String)
+parseSpace :: String -> Maybe (Useless, String)
 parseSpace (' ' : xs) = Just (Space, xs)
 parseSpace ('\n' : xs) = Just (Space, xs)
 parseSpace ('\r' : xs) = Just (Space, xs)
 parseSpace ('\t' : xs) = Just (Space, xs)
 parseSpace _ = Nothing
 
-parseComment :: String -> Maybe (Comment, String)
+parseComment :: String -> Maybe (Useless, String)
 parseComment ('/' : '/' : xs) = Just (Comment, dropComment xs)
   where
     -- don't consume "//"
@@ -38,11 +36,17 @@ parseComment _ = Nothing
 
 stripUseless :: String -> String
 stripUseless s =
-  case parseSpace s of
-    Just (_, xs) -> stripUseless xs
-    Nothing -> case parseComment s of
-      Just (_, xs) -> stripUseless xs
-      Nothing -> s
+  let lexers = [parseSpace, parseComment]
+      (xs, b) =
+        foldl
+          ( \(xxs, stripped) a ->
+              case a xxs of
+                Just (_, xxxs) -> (xxxs, True)
+                Nothing -> (xxs, stripped)
+          )
+          (s, False)
+          lexers
+   in if b then stripUseless xs else xs
 
 parseComma :: String -> Maybe (Punctuation, String)
 parseComma (',' : xs) = Just (Comma, xs)
