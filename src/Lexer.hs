@@ -3,7 +3,8 @@ module Lexer (Punctuation (..), Value, Token (..), lexer) where
 import Data.Char (isDigit)
 
 data Space = Space
-  deriving (Show)
+
+data Comment = Comment
 
 data Punctuation = Comma | Colon | BraceStart | BraceEnd | BracketStart | BracketEnd
   deriving (Show)
@@ -25,6 +26,23 @@ parseSpace ('\n' : xs) = Just (Space, xs)
 parseSpace ('\r' : xs) = Just (Space, xs)
 parseSpace ('\t' : xs) = Just (Space, xs)
 parseSpace _ = Nothing
+
+parseComment :: String -> Maybe (Comment, String)
+parseComment ('/' : '/' : xs) = Just (Comment, dropComment xs)
+  where
+    -- don't consume "//"
+    dropComment [] = []
+    dropComment ('\n' : xxs) = xxs
+    dropComment (_ : xxs) = dropComment xxs
+parseComment _ = Nothing
+
+stripUseless :: String -> String
+stripUseless s =
+  case parseSpace s of
+    Just (_, xs) -> stripUseless xs
+    Nothing -> case parseComment s of
+      Just (_, xs) -> stripUseless xs
+      Nothing -> s
 
 parseComma :: String -> Maybe (Punctuation, String)
 parseComma (',' : xs) = Just (Comma, xs)
@@ -126,41 +144,48 @@ parseNull _ = Nothing
 lexerPunctuation :: String -> Maybe (Punctuation, String)
 lexerPunctuation "" = Nothing
 lexerPunctuation s =
-  case parseSpace s of
-    Just (_, xs) -> lexerPunctuation xs
-    Nothing ->
-      let lexers = [parseComma, parseColon, parseBraceStart, parseBraceEnd, parseBrackectStart, parseBrackectEnd]
-       in foldl
-            ( \b a -> case b of
-                Just _ -> b
-                Nothing -> a s
-            )
-            Nothing
-            lexers
+  let lexers =
+        [ parseComma,
+          parseColon,
+          parseBraceStart,
+          parseBraceEnd,
+          parseBrackectStart,
+          parseBrackectEnd
+        ]
+   in foldl
+        ( \b a -> case b of
+            Just _ -> b
+            Nothing -> a s
+        )
+        Nothing
+        lexers
 
 lexerValue :: String -> Maybe (Value, String)
 lexerValue "" = Nothing
 lexerValue s =
-  case parseSpace s of
-    Just (_, xs) -> lexerValue xs
-    Nothing ->
-      let lexers = [parseString, parseDouble, parseBool, parseNull]
-       in foldl
-            ( \b a -> case b of
-                Just _ -> b
-                Nothing -> a s
-            )
-            Nothing
-            lexers
+  let lexers =
+        [ parseString,
+          parseDouble,
+          parseBool,
+          parseNull
+        ]
+   in foldl
+        ( \b a -> case b of
+            Just _ -> b
+            Nothing -> a s
+        )
+        Nothing
+        lexers
 
 lexOne :: String -> Maybe (Token, String)
 lexOne "" = Nothing
 lexOne s =
-  case lexerPunctuation s of
-    Just (p, xs) -> Just (Punc p, xs)
-    Nothing -> case lexerValue s of
-      Just (t, xs) -> Just (Val t, xs)
-      Nothing -> Nothing
+  let xs = stripUseless s
+   in case lexerPunctuation xs of
+        Just (p, xxs) -> Just (Punc p, xxs)
+        Nothing -> case lexerValue xs of
+          Just (t, xxs) -> Just (Val t, xxs)
+          Nothing -> Nothing
 
 lexAll :: String -> ([Token], String)
 lexAll "" = ([], "")
@@ -168,7 +193,7 @@ lexAll s = case lexOne s of
   Just (t, xs) ->
     let (ts, xxs) = lexAll xs
      in (t : ts, xxs)
-  Nothing -> ([], s)
+  Nothing -> ([], stripUseless s)
 
 lexer :: String -> [Token]
 lexer s = case lexAll s of
