@@ -1,11 +1,13 @@
 module Main (main) where
 
-import Lexer 
+import Lexer
 import Parser
+import System.Environment (getArgs)
 
 main :: IO ()
 main = do
-  s <- readFile "test.json"
+  file : _ <- getArgs
+  s <- readFile file
   let tokens = lexer s
   let ast = parser tokens
   print ast
